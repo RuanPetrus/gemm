@@ -19,7 +19,7 @@ if (!(expr)) { \
 #define TEST_COPY_ARRAY(x, x_exp) cudaMemcpy(x, x_exp, sizeof(x_exp), cudaMemcpyHostToDevice)
 #define TEST_COPY_PTR(x, x_exp, sz) cudaMemcpy(x, x_exp, (sz), cudaMemcpyHostToDevice)
 
-#define CLOSE_EPS 1e-4
+#define CLOSE_EPS 1e-3
 
 char *gpu_alloc(size_t n) 
 {
@@ -81,33 +81,36 @@ bool test_matmul()
 	int N, K, M;
 	LOAD_VAR(N); LOAD_VAR(K); LOAD_VAR(M);
 
-	float x_exp[N * K]; LOAD_ARRAY(x_exp);
-	float w_exp[K * M]; LOAD_ARRAY(w_exp);
-	float out_exp[N*M]; LOAD_ARRAY(out_exp);
+	float *x_exp = cpu_alloc_float(N*K);   LOAD_PTR(x_exp, N*K*sizeof(float));
+	float *w_exp = cpu_alloc_float(K*M);   LOAD_PTR(w_exp, K*M*sizeof(float));
+	float *out_exp = cpu_alloc_float(N*M); LOAD_PTR(out_exp, N*M*sizeof(float));
 	fclose(f);
 
-	float *x   = (float *) gpu_alloc(sizeof(x_exp)); 
-	float *w   = (float *) gpu_alloc(sizeof(w_exp)); 
-	float *out = (float *) gpu_alloc(sizeof(out_exp)); 
-	TEST_COPY_ARRAY(x, x_exp);
-	TEST_COPY_ARRAY(w, w_exp);
+	float *x   = (float *) gpu_alloc(N*K*sizeof(float)); 
+	float *w   = (float *) gpu_alloc(K*M*sizeof(float)); 
+	float *out = (float *) gpu_alloc(N*M*sizeof(float)); 
+
+	TEST_COPY_PTR(x, x_exp, N*K*sizeof(float));
+	TEST_COPY_PTR(w, w_exp, K*M*sizeof(float));
 	cudaDeviceSynchronize();
 
 	gemm(N, M, K, x, w, out);
 	cudaDeviceSynchronize();
+	if (!assert_close(out, out_exp, N*M)) return false;
 
-	// printf("%d %d %d\n", N, K, M);
-	// show_data(x_exp, N*K);
-	// show_gpu_data(x, N*K);
-	// printf("\n");
-	// show_data(w_exp, K*M);
-	// show_gpu_data(w, K*M);
-	// printf("\n");
-	// show_data(out_exp, N*M);
-	// show_gpu_data(out, N*M);
-	// printf("\n");
+	for (int z = 0; z < 1000; z++) {
+		auto start = std::chrono::steady_clock::now();
+		gemm(N, M, K, x, w, out);
+		cudaDeviceSynchronize();
+		auto stop = std::chrono::steady_clock::now();
 
-	return assert_close(out, out_exp, N*M);
+		auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start);
+		long double duration_nano = duration.count();
+		double gflop = 2*(double)N*K*M;
+		double gflops = gflop / duration_nano;
+		printf("Foward Attention Gflops = %lf\n", gflops);
+	}
+	return true;
 }
 
 int main()

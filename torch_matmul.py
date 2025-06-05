@@ -3,9 +3,9 @@ import torch
 TEMP_PATH = "/tmp/matmul_"
 
 def test_matmul():
-    N = 30
-    K = 40
-    M = 7
+    N = 1024
+    K = 1024
+    M = 1024
 
     x = torch.randn(N, K, dtype=torch.float32)
     w = torch.randn(K, M, dtype=torch.float32)
