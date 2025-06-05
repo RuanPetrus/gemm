@@ -1,2 +1,3 @@
 mat_mul
 cublas
+test_matmul
