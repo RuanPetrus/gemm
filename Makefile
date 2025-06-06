@@ -1,6 +1,7 @@
 
 CFLAGS="-Wall,-Wextra"
-NVCC_FLAGS=-std=c++17
+# NVCC_FLAGS=-std=c++17 -O2 --ptxas-options="-v "
+NVCC_FLAGS=-std=c++17 -O3 -arch=native
 
 .PHONY: all test clean
 all: test device_info

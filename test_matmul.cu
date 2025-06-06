@@ -98,7 +98,14 @@ bool test_matmul()
 	cudaDeviceSynchronize();
 	if (!assert_close(out, out_exp, N*M)) return false;
 
-	for (int z = 0; z < 1000; z++) {
+	// Warming cache
+	for (int z = 0; z < 10; z++) {
+		gemm(N, M, K, x, w, out);
+		cudaDeviceSynchronize();
+	}
+	const int T = 30;
+	double sum_gflops = 0;
+	for (int z = 0; z < T; z++) {
 		auto start = std::chrono::steady_clock::now();
 		gemm(N, M, K, x, w, out);
 		cudaDeviceSynchronize();
@@ -108,8 +115,9 @@ bool test_matmul()
 		long double duration_nano = duration.count();
 		double gflop = 2*(double)N*K*M;
 		double gflops = gflop / duration_nano;
-		printf("Foward Attention Gflops = %lf\n", gflops);
+		sum_gflops += gflops;
 	}
+	printf("Foward Attention Gflops = %lf\n", sum_gflops / T);
 	return true;
 }
 
