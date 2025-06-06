@@ -139,11 +139,15 @@ bool test_matmul()
 			out, M));
 		cudaDeviceSynchronize();
 	}
+	float elapsed_time;
+	cudaEvent_t beg, end;
+	cudaEventCreate(&beg);
+	cudaEventCreate(&end);
+
 	const int T = 30;
-	double sum_gflops = 0;
+	cudaEventRecord(beg);
 	for (int z = 0; z < T; z++) {
-		auto start = std::chrono::steady_clock::now();
-		CHECK_CUBLAS(cublasSgemm(
+		cublasSgemm(
 			handle,
 			CUBLAS_OP_N, CUBLAS_OP_N,
 			N, M, K,          // Note the switched N and M for column-major
@@ -151,18 +155,25 @@ bool test_matmul()
 			w, M,
 			x, K,
 			&beta,
-			out, M));
-		cudaDeviceSynchronize();
-		auto stop = std::chrono::steady_clock::now();
-
-		auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start);
-		long double duration_nano = duration.count();
-		double gflop = 2*(double)N*K*M;
-		double gflops = gflop / duration_nano;
-		sum_gflops += gflops;
+			out, M);
 	}
+	cudaEventRecord(end);
+    cudaEventSynchronize(beg);
+    cudaEventSynchronize(end);
+    cudaEventElapsedTime(&elapsed_time, beg, end);
+    elapsed_time /= 1000.; // Convert to seconds
+
+	long flops = 2 * (long)N * M * K;
+	printf(
+		"--------------------------\n"
+		"cuBlas Implementation:\n"
+		"Average elapsed time: (%7.6f) s\n"
+		"performance: (%4.1f) GFLOPS.\n"
+		"--------------------------\n",
+		elapsed_time / T,
+		(T * flops * 1e-9) / elapsed_time);
+
     cublasDestroy(handle);
-	printf("Cublas MatMul Gflops = %lf\n", sum_gflops / T);
 	return true;
 }
 
@@ -175,8 +186,5 @@ int main()
 		fprintf(stderr, "Tests failed with %d errors\n", errors);
 		return 1;
 	}
-
-	fprintf(stdout, "SUCESS\n");
-
 	return 0;
 }

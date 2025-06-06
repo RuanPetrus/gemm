@@ -103,21 +103,32 @@ bool test_matmul()
 		gemm(N, M, K, x, w, out);
 		cudaDeviceSynchronize();
 	}
-	const int T = 30;
-	double sum_gflops = 0;
-	for (int z = 0; z < T; z++) {
-		auto start = std::chrono::steady_clock::now();
-		gemm(N, M, K, x, w, out);
-		cudaDeviceSynchronize();
-		auto stop = std::chrono::steady_clock::now();
+	float elapsed_time;
+	cudaEvent_t beg, end;
+	cudaEventCreate(&beg);
+	cudaEventCreate(&end);
 
-		auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start);
-		long double duration_nano = duration.count();
-		double gflop = 2*(double)N*K*M;
-		double gflops = gflop / duration_nano;
-		sum_gflops += gflops;
+	const int T = 30;
+	cudaEventRecord(beg);
+	for (int z = 0; z < T; z++) {
+		gemm(N, M, K, x, w, out);
 	}
-	printf("Gemm Matmul Gflops = %lf\n", sum_gflops / T);
+	cudaEventRecord(end);
+    cudaEventSynchronize(beg);
+    cudaEventSynchronize(end);
+    cudaEventElapsedTime(&elapsed_time, beg, end);
+    elapsed_time /= 1000.; // Convert to seconds
+
+	long flops = 2 * (long)N * M * K;
+	printf(
+		"--------------------------\n"
+		"Gemm Kernel Implementation:\n"
+		"Average elapsed time: (%7.6f) s\n"
+		"performance: (%5.1f) GFLOPS.\n"
+		"--------------------------\n",
+		elapsed_time / T,
+		(T * flops * 1e-9) / elapsed_time);
+
 	return true;
 }
 
@@ -130,8 +141,5 @@ int main()
 		fprintf(stderr, "Tests failed with %d errors\n", errors);
 		return 1;
 	}
-
-	fprintf(stdout, "SUCESS\n");
-
 	return 0;
 }
