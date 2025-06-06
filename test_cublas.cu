@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <chrono>
-
-#include "gemm.cu"
+#include <cuda_runtime.h>
+#include <cublas_v2.h>
 
 #define TEMP_PATH "/tmp/matmul_"
 #define TEST_ASSERT(expr, message, ...) do  { \
@@ -10,6 +10,8 @@ if (!(expr)) { \
 	return false; \
 } \
 } while(0)
+
+#define CHECK_CUBLAS(call) TEST_ASSERT((call) == CUBLAS_STATUS_SUCCESS, "cuBLAS error\n");
 
 #define LOAD_VAR(x)   TEST_ASSERT(sizeof(x) == fread(&x, 1, sizeof(x), f), "Test bin format is wrong\n");
 #define LOAD_ARRAY(x) TEST_ASSERT(sizeof(x) == fread(x, 1, sizeof(x), f), "Test bin format is wrong\n");
@@ -94,20 +96,62 @@ bool test_matmul()
 	TEST_COPY_PTR(w, w_exp, K*M*sizeof(float));
 	cudaDeviceSynchronize();
 
-	gemm(N, M, K, x, w, out);
+    cublasHandle_t handle;
+    CHECK_CUBLAS(cublasCreate(&handle));
+
+    const float alpha = 1.0f;
+    const float beta = 0.0f;
+
+	/*
+	Cublas works in collum major order, so is the same as trasnposing
+	the matrix, so we are going to calculate, C^T
+	C^T = B^T @ A^T
+	*/
+
+	CHECK_CUBLAS(cublasSgemm(
+		handle,
+		CUBLAS_OP_N, CUBLAS_OP_N,
+		N, M, K,          // Note the switched N and M for column-major
+		&alpha,
+		w, M,
+		x, K,
+		&beta,
+		out, M));
+
 	cudaDeviceSynchronize();
+	cudaError_t err = cudaGetLastError();
+	if (err != cudaSuccess) {
+		printf("cudaGetErrorString(err) = %s\n", cudaGetErrorString(err));
+		abort();
+	}
 	if (!assert_close(out, out_exp, N*M)) return false;
 
 	// Warming cache
 	for (int z = 0; z < 10; z++) {
-		gemm(N, M, K, x, w, out);
+		CHECK_CUBLAS(cublasSgemm(
+			handle,
+			CUBLAS_OP_N, CUBLAS_OP_N,
+			N, M, K,          // Note the switched N and M for column-major
+			&alpha,
+			w, M,
+			x, K,
+			&beta,
+			out, M));
 		cudaDeviceSynchronize();
 	}
 	const int T = 30;
 	double sum_gflops = 0;
 	for (int z = 0; z < T; z++) {
 		auto start = std::chrono::steady_clock::now();
-		gemm(N, M, K, x, w, out);
+		CHECK_CUBLAS(cublasSgemm(
+			handle,
+			CUBLAS_OP_N, CUBLAS_OP_N,
+			N, M, K,          // Note the switched N and M for column-major
+			&alpha,
+			w, M,
+			x, K,
+			&beta,
+			out, M));
 		cudaDeviceSynchronize();
 		auto stop = std::chrono::steady_clock::now();
 
@@ -117,7 +161,8 @@ bool test_matmul()
 		double gflops = gflop / duration_nano;
 		sum_gflops += gflops;
 	}
-	printf("Gemm Matmul Gflops = %lf\n", sum_gflops / T);
+    cublasDestroy(handle);
+	printf("Cublas MatMul Gflops = %lf\n", sum_gflops / T);
 	return true;
 }
 
