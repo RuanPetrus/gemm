@@ -52,6 +52,7 @@ bool assert_close(float *gpu_data, float *exp, int n, float eps = CLOSE_EPS)
 		float diff = abs(data[i] - exp[i]);
 		TEST_ASSERT(diff < eps, "Number are not close (i, diff) = (%d, %f)", i, diff);
 	}
+	free(data);
 	return true;
 }
 
@@ -63,6 +64,7 @@ bool show_gpu_data(float *gpu_data, int n)
 		printf("%.4f ", data[i]);
 	}
 	printf("\n");
+	free(data);
 	return true;
 }
 
@@ -127,8 +129,8 @@ bool test_matmul()
 	if (!assert_close(out, out_exp, N*M)) return false;
 
 	// Warming cache
-	for (int z = 0; z < 10; z++) {
-		CHECK_CUBLAS(cublasSgemm(
+	for (int z = 0; z < 50; z++) {
+		cublasSgemm(
 			handle,
 			CUBLAS_OP_N, CUBLAS_OP_N,
 			N, M, K,          // Note the switched N and M for column-major
@@ -136,7 +138,7 @@ bool test_matmul()
 			w, M,
 			x, K,
 			&beta,
-			out, M));
+			out, M);
 		cudaDeviceSynchronize();
 	}
 	float elapsed_time;
@@ -144,7 +146,7 @@ bool test_matmul()
 	cudaEventCreate(&beg);
 	cudaEventCreate(&end);
 
-	const int T = 30;
+	const int T = 50;
 	cudaEventRecord(beg);
 	for (int z = 0; z < T; z++) {
 		cublasSgemm(
@@ -174,6 +176,12 @@ bool test_matmul()
 		(T * flops * 1e-9) / elapsed_time);
 
     cublasDestroy(handle);
+	free(x_exp);
+	free(w_exp);
+	free(out_exp);
+	cudaFree(x);
+	cudaFree(w);
+	cudaFree(out);
 	return true;
 }
 

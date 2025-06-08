@@ -40,3 +40,21 @@ performance: (842.2) GFLOPS.
 --------------------------
 ```
 cuBLAS comparative: 80%  
+
+Commit-hash: b15b0a1041f7fc762bef1cb2fd48607e9acc3cd5
+```sh
+python3 torch_matmul.py
+./build/test_cublas
+--------------------------
+cuBlas Implementation:
+Average elapsed time: (0.016366) s
+performance: (1049.7) GFLOPS.
+--------------------------
+./build/test_matmul
+--------------------------
+Gemm Kernel Implementation:
+Average elapsed time: (0.019124) s
+performance: (898.3) GFLOPS.
+--------------------------
+```
+cuBLAS comparative: 85%  
